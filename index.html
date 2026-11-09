@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>ASCII TERMINAL</title>
+
+<style>
+
+* { box-sizing: border-box; }
+
+body {
+
+  margin: 0;
+
+  padding: 25px 15px;
+
+  min-height: 100vh;
+
+  background: radial-gradient(ellipse at top, #102116, #050806 65%);
+
+  color: #d9ffe2;
+
+  font-family: monospace;
+
+}
+
+main {
+
+  max-width: 1100px;
+
+  margin: auto;
+
+}
+
+h1 {
+
+  color: #65ff8f;
+
+  letter-spacing: 5px;
+
+}
+
+.sub {
+
+  color: #8ba995;
+
+  font-size: 13px;
+
+}
+
+.panel {
+
+  border: 1px solid #245b35;
+
+  background: #07100a;
+
+  border-radius: 12px;
+
+  padding: 16px;
+
+  box-shadow: 0 0 28px #1cff6320;
+
+}
+
+.controls {
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 12px;
+
+  align-items: center;
+
+  margin-bottom: 15px;
+
+}
+
+button, .file-label {
+
+  border: 1px solid #39864e;
+
+  background: #0b1b10;
+
+  color: #65ff8f;
+
+  padding: 10px 14px;
+
+  border-radius: 7px;
+
+  font-family: monospace;
+
+  cursor: pointer;
+
+}
+
+button:hover, .file-label:hover {
+
+  background: #14351d;
+
+}
+
+input[type=file] {
+
+  display: none;
+
+}
+
+label {
+
+  color: #a8c9b1;
+
+  font-size: 12px;
+
+}
+
+input[type=range] {
+
+  accent-color: #65ff8f;
+
+}
+
+.terminal {
+
+  background: #020403;
+
+  border: 1px solid #1e472b;
+
+  border-radius: 8px;
+
+  padding: 14px;
+
+  min-height: 300px;
+
+  overflow: auto;
+
+}
+
+.terminal-top {
+
+  color: #548d62;
+
+  font-size: 12px;
+
+  border-bottom: 1px solid #173520;
+
+  padding-bottom: 10px;
+
+  margin-bottom: 12px;
+
+}
+
+pre {
+
+  margin: 0;
+
+  color: #72ff91;
+
+  font-size: clamp(4px, .85vw, 10px);
+
+  line-height: .92;
+
+  white-space: pre;
+
+  width: max-content;
+
+  min-width: 100%;
+
+  text-shadow: 0 0 5px #4dff7938;
+
+}
+
+.hint {
+
+  color: #789782;
+
+  font-size: 12px;
+
+}
+
+.status {
+
+  color: #65ff8f;
+
+  font-size: 12px;
+
+  margin-left: auto;
+
+}
+
+@media(max-width:600px) {
+
+  pre { font-size: 5px; }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<main>
+
+<h1>ASCII TERMINAL</h1>
+
+<p class="sub">IMAGE → CHARACTERS · LIVE CONVERSION</p>
+
+<section class="panel">
+
+<div class="controls">
+
+<label class="file-label" for="imageInput">
+
+＋ Elegir imagen
+
+</label>
+
+<input id="imageInput" type="file" accept="image/*">
+
+<label>
+
+Ancho
+
+<input id="width" type="range" min="50" max="220" value="130">
+
+<span id="widthValue">130</span>
+
+</label>
+
+<label>
+
+<input id="color" type="checkbox" checked>
+
+Color verde
+
+</label>
+
+<button id="replay">↻ Reproducir</button>
+
+<button id="copy">Copiar ASCII</button>
+
+<button id="save">Guardar .txt</button>
+
+<span class="status" id="status">ESPERANDO IMAGEN…</span>
+
+</div>
+
+<div class="terminal">
+
+<div class="terminal-top">
+
+root@ascii:~$ image_to_ascii --render --animate
+
+</div>
+
+<pre id="output">Selecciona una imagen para comenzar…</pre>
+
+</div>
+
+<p class="hint">
+
+Las imágenes se procesan en tu navegador. No se suben a ningún servidor.
+
+</p>
+
+</section>
+
+</main>
+
+<canvas id="canvas" hidden></canvas>
+
+<script>
+
+(() => {
+
+const input = document.querySelector('#imageInput');
+
+const output = document.querySelector('#output');
+
+const canvas = document.querySelector('#canvas');
+
+const ctx = canvas.getContext('2d', {
+
+  willReadFrequently: true
+
+});
+
+const widthControl = document.querySelector('#width');
+
+const widthValue = document.querySelector('#widthValue');
+
+const colorControl = document.querySelector('#color');
+
+const status = document.querySelector('#status');
+
+const ramp = '@%#*+=-:. ';
+
+let ascii = '';
+
+let timer = null;
+
+let currentImage = null;
+
+function makeAscii(img) {
+
+  const cols = Number(widthControl.value);
+
+  const ratio = img.height / img.width;
+
+  const rows = Math.max(1, Math.round(cols * ratio * 0.48));
+
+  canvas.width = cols;
+
+  canvas.height = rows;
+
+  ctx.drawImage(img, 0, 0, cols, rows);
+
+  const pixels = ctx.getImageData(
+
+    0, 0, cols, rows
+
+  ).data;
+
+  let result = '';
+
+  for (let y = 0; y < rows; y++) {
+
+    for (let x = 0; x < cols; x++) {
+
+      const i = (y * cols + x) * 4;
+
+      const brightness =
+
+        pixels[i] * 0.299 +
+
+        pixels[i+1] * 0.587 +
+
+        pixels[i+2] * 0.114;
+
+      const index = Math.min(
+
+        ramp.length - 1,
+
+        Math.floor(
+
+          brightness / 255 * (ramp.length - 1)
+
+        )
+
+      );
+
+      result += ramp[index];
+
+    }
+
+    result += '\n';
+
+  }
+
+  ascii = result;
+
+  animate();
+
+}
+
+function animate() {
+
+  if (timer) clearInterval(timer);
+
+  output.textContent = '';
+
+  status.textContent = 'RENDERIZANDO…';
+
+  let pos = 0;
+
+  const step = Math.max(
+
+    80,
+
+    Math.floor(ascii.length / 90)
+
+  );
+
+  timer = setInterval(() => {
+
+    pos = Math.min(ascii.length, pos + step);
+
+    output.textContent = ascii.slice(0, pos);
+
+    if (pos >= ascii.length) {
+
+      clearInterval(timer);
+
+      timer = null;
+
+      status.textContent = 'COMPLETADO ✓';
+
+    }
+
+  }, 12);
+
+}
+
+input.addEventListener('change', () => {
+
+  const file = input.files[0];
+
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+
+    status.textContent = 'ARCHIVO NO VÁLIDO';
+
+    return;
+
+  }
+
+  const url = URL.createObjectURL(file);
+
+  const img = new Image();
+
+  img.onload = () => {
+
+    currentImage = img;
+
+    makeAscii(img);
+
+    URL.revokeObjectURL(url);
+
+  };
+
+  img.onerror = () => {
+
+    status.textContent = 'NO SE PUDO ABRIR';
+
+    URL.revokeObjectURL(url);
+
+  };
+
+  img.src = url;
+
+});
+
+widthControl.addEventListener('input', () => {
+
+  widthValue.textContent = widthControl.value;
+
+  if (currentImage) {
+
+    makeAscii(currentImage);
+
+  }
+
+});
+
+colorControl.addEventListener('change', () => {
+
+  output.style.color = colorControl.checked
+
+    ? '#72ff91'
+
+    : '#d8e6dc';
+
+  output.style.textShadow = colorControl.checked
+
+    ? '0 0 5px #4dff7938'
+
+    : 'none';
+
+});
+
+document.querySelector('#replay').addEventListener(
+
+  'click', () => {
+
+    if (ascii) animate();
+
+  }
+
+);
+
+document.querySelector('#copy').addEventListener(
+
+  'click', async () => {
+
+    if (!ascii) return;
+
+    try {
+
+      await navigator.clipboard.writeText(ascii);
+
+      status.textContent = 'COPIADO ✓';
+
+    } catch {
+
+      status.textContent = 'NO SE PUDO COPIAR';
+
+    }
+
+  }
+
+);
+
+document.querySelector('#save').addEventListener(
+
+  'click', () => {
+
+    if (!ascii) return;
+
+    const blob = new Blob([ascii], {
+
+      type: 'text/plain;charset=utf-8'
+
+    });
+
+    const a = document.createElement('a');
+
+    a.href = URL.createObjectURL(blob);
+
+    a.download = 'ascii-art.txt';
+
+    a.click();
+
+    URL.revokeObjectURL(a.href);
+
+  }
+
+);
+
+})();
+
+</script>
+
+</body>
+
+</html>
